@@ -1,8 +1,15 @@
 require("dotenv").config();
+
 const { Client, GatewayIntentBits } = require("discord.js");
 const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus } = require("@discordjs/voice");
 const play = require("play-dl");
-const ffmpeg = require("ffmpeg-static");
+
+play.setToken({
+  spotify: {
+    client_id: process.env.SPOTIFY_CLIENT_ID,
+    client_secret: process.env.SPOTIFY_SECRET
+  }
+});
 
 const client = new Client({
   intents: [
@@ -14,7 +21,7 @@ const client = new Client({
 const queue = new Map();
 
 client.once("ready", () => {
-  console.log("Music Bot 起動！");
+  console.log("Music Bot Ready 🎵");
 });
 
 client.on("interactionCreate", async interaction => {
@@ -25,18 +32,37 @@ client.on("interactionCreate", async interaction => {
 
   if (interaction.commandName === "play") {
 
+    await interaction.deferReply();
+
     const url = interaction.options.getString("url");
 
     const voiceChannel = interaction.member.voice.channel;
     if (!voiceChannel)
-      return interaction.reply("VCに入ってください");
+      return interaction.editReply("VCに入ってください");
 
-    const song = { url };
+    let song;
+
+    if (play.sp_validate(url) === "track") {
+
+      const track = await play.spotify(url);
+      song = {
+        title: track.name,
+        url: `ytsearch:${track.name} ${track.artists[0].name}`
+      };
+
+    } else {
+
+      song = {
+        title: url,
+        url: url
+      };
+
+    }
 
     if (!serverQueue) {
 
       const queueConstruct = {
-        voiceChannel: voiceChannel,
+        voiceChannel,
         songs: [],
         player: createAudioPlayer()
       };
@@ -54,12 +80,12 @@ client.on("interactionCreate", async interaction => {
 
       playSong(interaction.guild, queueConstruct.songs[0]);
 
-      interaction.reply("再生開始 🎵");
+      interaction.editReply(`再生開始 🎵 ${song.title}`);
 
     } else {
 
       serverQueue.songs.push(song);
-      interaction.reply("キューに追加しました");
+      interaction.editReply("キューに追加しました");
 
     }
 
@@ -95,7 +121,7 @@ client.on("interactionCreate", async interaction => {
     let text = "再生リスト:\n";
 
     serverQueue.songs.forEach((song, i) => {
-      text += `${i + 1}. ${song.url}\n`;
+      text += `${i + 1}. ${song.title}\n`;
     });
 
     interaction.reply(text);
